@@ -60,6 +60,8 @@ def start_google_login():
     )
 
     st.session_state["oauth_state"] = state
+    st.session_state["code_verifier"] = flow.code_verifier
+
     st.link_button("Entrar com Google", authorization_url)
 
 
@@ -72,13 +74,19 @@ def handle_oauth_callback():
     code = query_params.get("code")
     returned_state = query_params.get("state")
     saved_state = st.session_state.get("oauth_state")
+    saved_code_verifier = st.session_state.get("code_verifier")
 
     if saved_state and returned_state != saved_state:
         st.error("Falha na validação do login. Tente novamente.")
         st.stop()
 
+    if not saved_code_verifier:
+        st.error("Sessão de login expirada ou inválida. Clique em Entrar com Google novamente.")
+        st.stop()
+
     try:
         flow = get_flow(state=saved_state)
+        flow.code_verifier = saved_code_verifier
         flow.fetch_token(code=code)
 
         creds = flow.credentials
@@ -92,9 +100,10 @@ def handle_oauth_callback():
             "scopes": list(creds.scopes) if creds.scopes else SCOPES,
         }
 
-        # limpa query params depois do login
         st.query_params.clear()
-        st.session_state["oauth_state"] = None
+        st.session_state.pop("oauth_state", None)
+        st.session_state.pop("code_verifier", None)
+
         st.success("Login com Google realizado com sucesso.")
         st.rerun()
 
@@ -117,7 +126,6 @@ def get_user_credentials():
         scopes=token_data["scopes"],
     )
 
-    # renova token se necessário
     if creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
@@ -139,6 +147,7 @@ def get_user_credentials():
 def logout():
     st.session_state.pop("google_token", None)
     st.session_state.pop("oauth_state", None)
+    st.session_state.pop("code_verifier", None)
     st.query_params.clear()
     st.rerun()
 
@@ -280,7 +289,6 @@ def gerar_fobi(
         compensacao,
     )
 
-    # Lê o template como texto
     conteudo_template = drive_service.files().export_media(
         fileId=TEMPLATE_ID,
         mimeType="text/plain",
@@ -299,14 +307,12 @@ def gerar_fobi(
     for chave, valor in dados.items():
         conteudo_template = conteudo_template.replace(chave, valor or "")
 
-    # Cria novo Google Doc
     novo_doc = docs_service.documents().create(
         body={"title": f"FOBI - {numero_processo}"}
     ).execute()
 
     doc_id = novo_doc["documentId"]
 
-    # Insere o texto
     docs_service.documents().batchUpdate(
         documentId=doc_id,
         body={
@@ -321,7 +327,6 @@ def gerar_fobi(
         },
     ).execute()
 
-    # Move para a pasta de destino
     arquivo_atual = drive_service.files().get(
         fileId=doc_id,
         fields="parents",
