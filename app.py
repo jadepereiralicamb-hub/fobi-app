@@ -2,9 +2,7 @@ import locale
 from datetime import datetime
 
 import streamlit as st
-from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -13,149 +11,28 @@ from googleapiclient.errors import HttpError
 # =========================
 st.set_page_config(page_title="FOBI - Intervenção Ambiental", page_icon="📄")
 
-SCOPES = [
-    "openid",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
+TEMPLATE_ID = "1kwLTcVTem1clj_to_YjuQyBCYMenSrIBBJJBhSSnjMo"
+PASTA_ID = "1ir6pbTBPGKwUJPyx2KmZO4bl3lnybPVT"
+
+GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/documents",
 ]
 
-TEMPLATE_ID = "1kwLTcVTem1clj_to_YjuQyBCYMenSrIBBJJBhSSnjMo"
-PASTA_ID = "1ir6pbTBPGKwUJPyx2KmZO4bl3lnybPVT"
-
 
 # =========================
-# OAUTH
+# AUTH / GOOGLE SERVICES
 # =========================
-def get_client_config():
-    return {
-        "web": {
-            "client_id": st.secrets["google_oauth"]["client_id"],
-            "client_secret": st.secrets["google_oauth"]["client_secret"],
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [st.secrets["google_oauth"]["redirect_uri"]],
-        }
-    }
-
-
-def get_flow(state=None):
-    flow = Flow.from_client_config(
-        get_client_config(),
-        scopes=SCOPES,
-        state=state,
-    )
-    flow.redirect_uri = st.secrets["google_oauth"]["redirect_uri"]
-    return flow
-
-
-def start_google_login():
-    flow = get_flow()
-
-    authorization_url, state = flow.authorization_url(
-        access_type="offline",
-        include_granted_scopes="true",
-        prompt="consent",
-    )
-
-    st.session_state["oauth_state"] = state
-    st.session_state["code_verifier"] = flow.code_verifier
-
-    st.link_button("Entrar com Google", authorization_url)
-
-
-def handle_oauth_callback():
-    query_params = st.query_params
-
-    if "code" not in query_params:
-        return
-
-    code = query_params.get("code")
-    returned_state = query_params.get("state")
-    saved_state = st.session_state.get("oauth_state")
-    saved_code_verifier = st.session_state.get("code_verifier")
-
-    if saved_state and returned_state != saved_state:
-        st.error("Falha na validação do login. Tente novamente.")
-        st.stop()
-
-    if not saved_code_verifier:
-        st.error("Sessão de login expirada ou inválida. Clique em Entrar com Google novamente.")
-        st.stop()
-
-    try:
-        flow = get_flow(state=saved_state)
-        flow.code_verifier = saved_code_verifier
-        flow.fetch_token(code=code)
-
-        creds = flow.credentials
-
-        st.session_state["google_token"] = {
-            "token": creds.token,
-            "refresh_token": creds.refresh_token,
-            "token_uri": creds.token_uri,
-            "client_id": creds.client_id,
-            "client_secret": creds.client_secret,
-            "scopes": list(creds.scopes) if creds.scopes else SCOPES,
-        }
-
-        st.query_params.clear()
-        st.session_state.pop("oauth_state", None)
-        st.session_state.pop("code_verifier", None)
-
-        st.success("Login com Google realizado com sucesso.")
-        st.rerun()
-
-    except Exception as e:
-        st.error(f"Erro ao concluir login com Google: {e}")
-        st.stop()
-
-
-def get_user_credentials():
-    token_data = st.session_state.get("google_token")
-    if not token_data:
-        return None
-
-    creds = Credentials(
-        token=token_data["token"],
-        refresh_token=token_data.get("refresh_token"),
-        token_uri=token_data["token_uri"],
-        client_id=token_data["client_id"],
-        client_secret=token_data["client_secret"],
-        scopes=token_data["scopes"],
-    )
-
-    if creds.expired and creds.refresh_token:
-        try:
-            creds.refresh(Request())
-            st.session_state["google_token"] = {
-                "token": creds.token,
-                "refresh_token": creds.refresh_token,
-                "token_uri": creds.token_uri,
-                "client_id": creds.client_id,
-                "client_secret": creds.client_secret,
-                "scopes": list(creds.scopes) if creds.scopes else SCOPES,
-            }
-        except Exception:
-            st.session_state.pop("google_token", None)
-            return None
-
-    return creds
-
-
-def logout():
-    st.session_state.pop("google_token", None)
-    st.session_state.pop("oauth_state", None)
-    st.session_state.pop("code_verifier", None)
-    st.query_params.clear()
-    st.rerun()
-
-
 def get_google_services():
-    creds = get_user_credentials()
-    if not creds:
+    if not st.user.is_logged_in:
         return None, None
+
+    access_token = st.user.tokens.get("access")
+    if not access_token:
+        st.error("Token de acesso não disponível. Verifique expose_tokens no secrets.toml.")
+        st.stop()
+
+    creds = Credentials(token=access_token)
 
     docs_service = build("docs", "v1", credentials=creds)
     drive_service = build("drive", "v3", credentials=creds)
@@ -352,24 +229,24 @@ def gerar_fobi(
 # =========================
 # APP
 # =========================
-handle_oauth_callback()
-
 st.title("FOBI - Intervenção Ambiental")
 
-creds = get_user_credentials()
-
 col1, col2 = st.columns([3, 1])
+
 with col1:
-    if creds:
-        st.success("Google conectado.")
+    if st.user.is_logged_in:
+        nome = getattr(st.user, "name", None) or getattr(st.user, "email", "Usuário")
+        st.success(f"Google conectado: {nome}")
     else:
         st.info("Faça login com sua conta Google para gerar o documento no seu Drive.")
-with col2:
-    if creds:
-        st.button("Sair", on_click=logout)
 
-if not creds:
-    start_google_login()
+with col2:
+    if st.user.is_logged_in:
+        st.button("Sair", on_click=st.logout)
+
+if not st.user.is_logged_in:
+    if st.button("Entrar com Google", type="primary"):
+        st.login("google")
     st.stop()
 
 docs_service, drive_service = get_google_services()
