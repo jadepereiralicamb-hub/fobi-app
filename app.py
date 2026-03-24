@@ -6,60 +6,38 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-# =========================
-# CONFIG GERAL
-# =========================
 st.set_page_config(page_title="FOBI - Intervenção Ambiental", page_icon="📄")
 
 TEMPLATE_ID = "1kwLTcVTem1clj_to_YjuQyBCYMenSrIBBJJBhSSnjMo"
 PASTA_ID = "1ir6pbTBPGKwUJPyx2KmZO4bl3lnybPVT"
 
-GOOGLE_SCOPES = [
-    "https://www.googleapis.com/auth/drive",
-    "https://www.googleapis.com/auth/documents",
-]
 
-
-# =========================
-# AUTH / GOOGLE SERVICES
-# =========================
 def get_google_services():
-    if not st.user.is_logged_in:
-        return None, None
+    tokens = getattr(st.user, "tokens", None)
+    if not tokens:
+        st.error("Tokens não disponíveis. Verifique a configuração de autenticação.")
+        st.stop()
 
-    access_token = st.user.tokens.get("access")
+    access_token = tokens.get("access")
     if not access_token:
-        st.error("Token de acesso não disponível. Verifique expose_tokens no secrets.toml.")
+        st.error("Access token não disponível.")
         st.stop()
 
     creds = Credentials(token=access_token)
-
     docs_service = build("docs", "v1", credentials=creds)
     drive_service = build("drive", "v3", credentials=creds)
     return docs_service, drive_service
 
 
-# =========================
-# AUXILIARES
-# =========================
 def data_ptbr():
     try:
         locale.setlocale(locale.LC_TIME, "pt_BR.UTF-8")
         return datetime.now().strftime("%d de %B de %Y")
     except locale.Error:
         meses = {
-            1: "janeiro",
-            2: "fevereiro",
-            3: "março",
-            4: "abril",
-            5: "maio",
-            6: "junho",
-            7: "julho",
-            8: "agosto",
-            9: "setembro",
-            10: "outubro",
-            11: "novembro",
-            12: "dezembro",
+            1: "janeiro", 2: "fevereiro", 3: "março", 4: "abril",
+            5: "maio", 6: "junho", 7: "julho", 8: "agosto",
+            9: "setembro", 10: "outubro", 11: "novembro", 12: "dezembro"
         }
         hoje = datetime.now()
         return f"{hoje.day} de {meses[hoje.month]} de {hoje.year}"
@@ -83,12 +61,9 @@ def montar_texto_exigencias(
         )
 
     if quantidade_arvores:
-        texto.append(
-            "Item 5.1.4: Informar quantidade de árvores isoladas suprimidas.\n"
-        )
+        texto.append("Item 5.1.4: Informar quantidade de árvores isoladas suprimidas.\n")
 
     texto.append("Apresentar os documentos conforme item 12:\n")
-
     texto.append(
         "- Documento de identificação do requerente;\n"
         "- Documento do proprietário do imóvel;\n"
@@ -103,19 +78,13 @@ def montar_texto_exigencias(
         )
 
     if possui_app == "Sim":
-        texto.append(
-            "- Delimitação de APP conforme Lei 20.922/2013;\n"
-        )
+        texto.append("- Delimitação de APP conforme Lei 20.922/2013;\n")
 
     if procurador == "Sim":
-        texto.append(
-            "- Procuração com documentos do procurador;\n"
-        )
+        texto.append("- Procuração com documentos do procurador;\n")
 
     if requerente_proprietario == "Não":
-        texto.append(
-            "- Contrato e carta de anuência;\n"
-        )
+        texto.append("- Contrato e carta de anuência;\n")
 
     texto.append(
         "- Levantamento planimétrico com ART e arquivo KML contendo:\n"
@@ -126,13 +95,9 @@ def montar_texto_exigencias(
     )
 
     if compensacao == "Mudas":
-        texto.append(
-            "- Atender Resolução Codema nº 04/2018 (doação de mudas);\n"
-        )
+        texto.append("- Atender Resolução Codema nº 04/2018 (doação de mudas);\n")
     else:
-        texto.append(
-            "- Apresentar ofício solicitando compensação pecuniária;\n"
-        )
+        texto.append("- Apresentar ofício solicitando compensação pecuniária;\n")
 
     texto.append(
         "- Comprovante de pagamento das taxas municipais conforme Lei 6.584/2021.\n"
@@ -226,27 +191,27 @@ def gerar_fobi(
     return doc_id
 
 
-# =========================
-# APP
-# =========================
+def is_logged_in():
+    return getattr(st.user, "is_logged_in", False)
+
+
 st.title("FOBI - Intervenção Ambiental")
 
 col1, col2 = st.columns([3, 1])
 
 with col1:
-    if st.user.is_logged_in:
+    if is_logged_in():
         nome = getattr(st.user, "name", None) or getattr(st.user, "email", "Usuário")
         st.success(f"Google conectado: {nome}")
     else:
         st.info("Faça login com sua conta Google para gerar o documento no seu Drive.")
 
 with col2:
-    if st.user.is_logged_in:
+    if is_logged_in():
         st.button("Sair", on_click=st.logout)
 
-if not st.user.is_logged_in:
-    if st.button("Entrar com Google", type="primary"):
-        st.login("google")
+if not is_logged_in():
+    st.button("Entrar com Google", on_click=st.login, type="primary")
     st.stop()
 
 docs_service, drive_service = get_google_services()
