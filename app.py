@@ -11,8 +11,8 @@ SCOPES = [
     'https://www.googleapis.com/auth/drive'
 ]
 
-creds = Credentials.from_service_account_file(
-    'credenciais.json', scopes=SCOPES)
+creds = Credentials.from_service_account_info(
+    st.secrets["gcp"], scopes=SCOPES)
 
 docs_service = build('docs', 'v1', credentials=creds)
 drive_service = build('drive', 'v3', credentials=creds)
