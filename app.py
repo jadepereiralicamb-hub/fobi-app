@@ -17,8 +17,8 @@ creds = Credentials.from_service_account_file(
 docs_service = build('docs', 'v1', credentials=creds)
 drive_service = build('drive', 'v3', credentials=creds)
 
-TEMPLATE_ID = "COLE_AQUI"
-PASTA_ID = "COLE_AQUI"
+TEMPLATE_ID = "1kwLTcVTem1clj_to_YjuQyBCYMenSrIBBJJBhSSnjMo"
+PASTA_ID = "1qZL1hwnug71MlVz565gw43jm_8ldHLI-"
 
 # =========================
 # FORMULÁRIO
