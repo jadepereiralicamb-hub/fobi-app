@@ -21,7 +21,7 @@ TEMPLATE_ID = "1kwLTcVTem1clj_to_YjuQyBCYMenSrIBBJJBhSSnjMo"
 PASTA_ID = "1ir6pbTBPGKwUJPyx2KmZO4bl3lnybPVT"
 
 # =========================
-# FORMULÁRIO
+# INTERFACE
 # =========================
 st.title("FOBI - Intervenção Ambiental")
 
@@ -44,95 +44,95 @@ st.subheader("Compensação ambiental")
 compensacao = st.radio("Tipo", ["Mudas", "Pecuniária"])
 
 # =========================
-# GERAR TEXTO
+# GERAR FOBI
 # =========================
 if st.button("Gerar FOBI"):
 
     texto = []
 
-    # Pendência
+    # Pendências
     if requerimento_incompleto:
-        texto.append("""
-Considerando que o requerimento apresenta informações incompletas, deverá apresentar versão retificada e assinada em todas as páginas.
-""")
+        texto.append(
+            "Considerando que o requerimento apresenta informações incompletas, deverá apresentar versão retificada e assinada em todas as páginas.\n"
+        )
 
     if quantidade_arvores:
-        texto.append("""
-Item 5.1.4: Informar quantidade de árvores isoladas suprimidas.
-""")
+        texto.append(
+            "Item 5.1.4: Informar quantidade de árvores isoladas suprimidas.\n"
+        )
 
     texto.append("Apresentar os documentos conforme item 12:\n")
 
     # Documentos base
-    texto.append("""
-- Documento de identificação do requerente;
-- Documento do proprietário do imóvel;
-- Documento do imóvel;
-- Cadastro Ambiental Rural (CAR);
-- Roteiro de acesso com imagem de satélite;
-""")
+    texto.append(
+        "- Documento de identificação do requerente;\n"
+        "- Documento do proprietário do imóvel;\n"
+        "- Documento do imóvel;\n"
+        "- Cadastro Ambiental Rural (CAR);\n"
+        "- Roteiro de acesso com imagem de satélite;\n"
+    )
 
     # Supressão
     if supressao == "Sim":
-        texto.append("""
-- Laudo técnico com ART sobre espécies ameaçadas conforme Decreto 47.749/2019;
-""")
+        texto.append(
+            "- Laudo técnico com ART sobre espécies ameaçadas conforme Decreto 47.749/2019;\n"
+        )
 
     # APP
     if possui_app == "Sim":
-        texto.append("""
-- Delimitação de APP conforme Lei 20.922/2013;
-""")
+        texto.append(
+            "- Delimitação de APP conforme Lei 20.922/2013;\n"
+        )
 
     # Procurador
     if procurador == "Sim":
-        texto.append("""
-- Procuração com documentos do procurador;
-""")
+        texto.append(
+            "- Procuração com documentos do procurador;\n"
+        )
 
     # Não proprietário
     if requerente_proprietario == "Não":
-        texto.append("""
-- Contrato e carta de anuência;
-""")
+        texto.append(
+            "- Contrato e carta de anuência;\n"
+        )
 
     # Georreferenciamento
-    texto.append("""
-- Levantamento planimétrico com ART e arquivo KML contendo:
-  * Área do lote
-  * APP (quando houver)
-  * Áreas de intervenção
-  * Árvores a suprimir
-""")
+    texto.append(
+        "- Levantamento planimétrico com ART e arquivo KML contendo:\n"
+        "  * Área do lote\n"
+        "  * APP (quando houver)\n"
+        "  * Áreas de intervenção\n"
+        "  * Árvores a suprimir\n"
+    )
 
     # Compensação
     if compensacao == "Mudas":
-        texto.append("""
-- Atender Resolução Codema nº 04/2018 (doação de mudas);
-""")
+        texto.append(
+            "- Atender Resolução Codema nº 04/2018 (doação de mudas);\n"
+        )
     else:
-        texto.append("""
-- Apresentar ofício solicitando compensação pecuniária;
-""")
+        texto.append(
+            "- Apresentar ofício solicitando compensação pecuniária;\n"
+        )
 
     # Taxas
-    texto.append("""
-- Comprovante de pagamento das taxas municipais conforme Lei 6.584/2021.
-""")
+    texto.append(
+        "- Comprovante de pagamento das taxas municipais conforme Lei 6.584/2021.\n"
+    )
 
     texto_final = "\n".join(texto)
 
-    # ==========================
-    # GERAR DOCS
     # =========================
-    copia = drive_service.files().copy(
+    # LER TEMPLATE COMO TEXTO
+    # =========================
+    conteudo_template = drive_service.files().export_media(
         fileId=TEMPLATE_ID,
-        body={"name": f"FOBI - {numero_processo}",
-              "parents": [PASTA_ID]}
-    ).execute()
+        mimeType="text/plain"
+    ).execute().decode("utf-8")
 
-    doc_id = copia['id']
-
+    # =========================
+    # SUBSTITUIR VARIÁVEIS
+    # =========================
     dados = {
         "{{numero_processo}}": numero_processo,
         "{{interessado}}": interessado,
@@ -143,18 +143,42 @@ Item 5.1.4: Informar quantidade de árvores isoladas suprimidas.
         "{{texto_exigencias}}": texto_final
     }
 
-    requests = []
-    for k, v in dados.items():
-        requests.append({
-            'replaceAllText': {
-                'containsText': {'text': k, 'matchCase': True},
-                'replaceText': v
-            }
-        })
+    for chave, valor in dados.items():
+        conteudo_template = conteudo_template.replace(chave, valor)
 
+    # =========================
+    # CRIAR NOVO DOC
+    # =========================
+    novo_doc = docs_service.documents().create(
+        body={"title": f"FOBI - {numero_processo}"}
+    ).execute()
+
+    doc_id = novo_doc["documentId"]
+
+    # =========================
+    # INSERIR TEXTO
+    # =========================
     docs_service.documents().batchUpdate(
         documentId=doc_id,
-        body={'requests': requests}
+        body={
+            "requests": [
+                {
+                    "insertText": {
+                        "location": {"index": 1},
+                        "text": conteudo_template
+                    }
+                }
+            ]
+        }
+    ).execute()
+
+    # =========================
+    # MOVER PARA PASTA
+    # =========================
+    drive_service.files().update(
+        fileId=doc_id,
+        addParents=PASTA_ID,
+        removeParents="root"
     ).execute()
 
     st.success("FOBI gerado com sucesso!")
